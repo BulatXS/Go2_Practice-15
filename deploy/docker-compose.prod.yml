@@ -1,0 +1,154 @@
+services:
+  redis:
+    image: redis:7
+    container_name: pr15-redis
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    container_name: pr15-postgres
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: pr15-rabbitmq
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  auth:
+    image: ${DOCKERHUB_USERNAME}/pr15-auth:${IMAGE_TAG:-latest}
+    container_name: pr15-auth
+    restart: unless-stopped
+    command: ["/bin/auth"]
+    env_file:
+      - .env
+    environment:
+      AUTH_PORT: ${AUTH_PORT}
+      AUTH_GRPC_PORT: ${AUTH_GRPC_PORT}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  tasks_1:
+    image: ${DOCKERHUB_USERNAME}/pr15-tasks:${IMAGE_TAG:-latest}
+    container_name: pr15-tasks-1
+    restart: unless-stopped
+    command: ["/bin/tasks"]
+    env_file:
+      - .env
+    environment:
+      INSTANCE_ID: tasks-1
+      TASKS_PORT: ${TASKS_PORT}
+      AUTH_GRPC_ADDR: ${AUTH_GRPC_ADDR}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_ADDR: ${REDIS_ADDR}
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS}
+      CACHE_TTL_JITTER_SECONDS: ${CACHE_TTL_JITTER_SECONDS}
+      RABBIT_URL: ${RABBIT_URL}
+      QUEUE_NAME: ${QUEUE_NAME}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth:
+        condition: service_started
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+
+  tasks_2:
+    image: ${DOCKERHUB_USERNAME}/pr15-tasks:${IMAGE_TAG:-latest}
+    container_name: pr15-tasks-2
+    restart: unless-stopped
+    command: ["/bin/tasks"]
+    env_file:
+      - .env
+    environment:
+      INSTANCE_ID: tasks-2
+      TASKS_PORT: ${TASKS_PORT}
+      AUTH_GRPC_ADDR: ${AUTH_GRPC_ADDR}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_ADDR: ${REDIS_ADDR}
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS}
+      CACHE_TTL_JITTER_SECONDS: ${CACHE_TTL_JITTER_SECONDS}
+      RABBIT_URL: ${RABBIT_URL}
+      QUEUE_NAME: ${QUEUE_NAME}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth:
+        condition: service_started
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+
+  worker:
+    image: ${DOCKERHUB_USERNAME}/pr15-worker:${IMAGE_TAG:-latest}
+    container_name: pr15-worker
+    restart: unless-stopped
+    command: ["/bin/worker"]
+    env_file:
+      - .env
+    environment:
+      RABBIT_URL: ${RABBIT_URL}
+      QUEUE_NAME: ${QUEUE_NAME}
+      WORKER_PREFETCH: ${WORKER_PREFETCH}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  graphql:
+    image: ${DOCKERHUB_USERNAME}/pr15-graphql:${IMAGE_TAG:-latest}
+    container_name: pr15-graphql
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      INSTANCE_ID: graphql
+      GRAPHQL_PORT: ${GRAPHQL_PORT}
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:latest
+    container_name: pr15-nginx
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./cert.pem:/etc/nginx/tls/cert.pem:ro
+      - ./key.pem:/etc/nginx/tls/key.pem:ro
+    depends_on:
+      tasks_1:
+        condition: service_started
+      tasks_2:
+        condition: service_started
+      auth:
+        condition: service_started
+      graphql:
+        condition: service_started
+
+volumes:
+  postgres_data:
