@@ -16,7 +16,7 @@ SSH на VPS -> docker-compose pull/up -> сервис доступен чере
 ssh -i ~/.ssh/pr15_vps root@89.22.236.121
 ```
 
-![ssh](docs/screenshots/ssh connection.png)
+![ssh](docs/screenshots/ssh%20connection.png)
 
 ## 2. Где размещено приложение и структура директорий
 
