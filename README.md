@@ -57,7 +57,7 @@ Unit-файл:
 systemctl status pr15-stack --no-pager
 ```
 
-![status](docs/screenshots/service status.png)
+![status](docs/screenshots/service%20status.png)
 
 ## 5. Пример `journalctl -u pr15-stack -n 30`
 
