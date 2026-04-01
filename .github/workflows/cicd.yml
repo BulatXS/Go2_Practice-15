@@ -78,14 +78,19 @@ jobs:
 
             if docker compose version >/dev/null 2>&1; then
               COMPOSE="docker compose"
+              IS_V1=0
             elif command -v docker-compose >/dev/null 2>&1; then
               COMPOSE="docker-compose"
+              IS_V1=1
             else
               echo "No docker compose command found on VPS" >&2
               exit 1
             fi
 
             $COMPOSE -f docker-compose.prod.yml pull
+            if [ "$IS_V1" -eq 1 ]; then
+              $COMPOSE -f docker-compose.prod.yml down --remove-orphans
+            fi
             $COMPOSE -f docker-compose.prod.yml up -d --remove-orphans
 
             docker logout || true
